@@ -1,6 +1,5 @@
-import express, { request, response } from 'express';
-import session from 'express-session'; 
-import bodyParser from 'body-parser';  
+import express from 'express';
+import session from 'express-session';  
 import { v4 as uuidv4 } from 'uuid';
 import moment from 'moment-timezone';
 import os from "os";
@@ -44,6 +43,8 @@ const getLocalIP = () => {
   return null;
 };
 
+const sessions = {}; // Almacena las sesiones iniciadas
+
 app.post('/login', (request, response) => {
   const { email, nickname, macAddress } = request.body;
 
@@ -64,6 +65,11 @@ app.post('/login', (request, response) => {
     lastAccessed: now
   };
 
+  // Guarda la sesión en el objeto sessions
+  sessions[sessionId] = request.session.user;
+
+  console.log('Sesión iniciada:', sessions[sessionId]); // Verificar si la sesión se guarda correctamente
+
   return response.status(200).json({ message: "Sesión iniciada correctamente", sessionId });
 });
 
@@ -78,6 +84,11 @@ app.post("/logout", (request, response) => {
     if (err) {
       return response.status(500).send('Error al cerrar la sesión');
     }
+
+    // Elimina la sesión del objeto sessions
+    delete sessions[sessionId];
+
+    console.log('Sesión cerrada:', sessionId); // Verificar si la sesión se elimina correctamente
 
     return response.status(200).json({ message: "Sesión cerrada correctamente." });
   });
@@ -99,17 +110,22 @@ app.put('/update', (request, response) => {
   if (macAddress) request.session.user.macAddress = macAddress;
 
   request.session.user.lastAccessed = new Date();
+
+  // Actualiza la sesión en el objeto sessions
+  sessions[request.session.user.sessionId] = request.session.user;
+
+  console.log('Sesión actualizada:', sessions[request.session.user.sessionId]); // Verificar si la sesión se actualiza correctamente
+
   return response.status(200).json({
     message: "Datos actualizados correctamente.",
     updatedUser: request.session.user
   });
 });
 
-// Supongamos que sessions es un objeto donde se almacenan las sesiones
-const sessions = {}; 
-
 app.get("/status", (request, response) => {
   const sessionId = request.query.sessionId;
+
+  console.log('Consultando estado de la sesión:', sessionId); // Verificar la consulta del estado de la sesión
 
   if (!sessionId || !sessions[sessionId]) {
     return response.status(404).json({ message: "No se encontró una sesión activa con el sessionId proporcionado." });
@@ -122,19 +138,21 @@ app.get("/status", (request, response) => {
 });
 
 app.get('/listCurrentSession', (req, res) => {
-  const { sessionID } = req.query; // Obtiene el ID de sesión desde los parámetros de consulta
+  const { sessionId } = req.query; // Asegúrate de usar 'sessionId'
   const now = new Date();
 
+  console.log('Listando sesión actual:', sessionId); // Verificar la consulta de la sesión actual
+
   // Verifica si la sesión existe
-  if (!sessionID || !sessions[sessionID]) {
+  if (!sessionId || !sessions[sessionId]) {
     return res.status(404).json({ message: "No hay una sesión activa" });
   }
 
-  const sessionData = sessions[sessionID];
+  const sessionData = sessions[sessionId];
 
   // Recupera los datos de la sesión
-  const started = new Date(sessionData.createAD_CDMX);
-  const lastUpdate = new Date(sessionData.lastAccess);
+  const started = new Date(sessionData.createdAt);
+  const lastUpdate = new Date(sessionData.lastAccessed);
   const nickname = sessionData.nickname || "Desconocido";
   const email = sessionData.email || "No proporcionado";
   const ipSolicitud = sessionData.ip || "No registrada";
@@ -157,10 +175,10 @@ app.get('/listCurrentSession', (req, res) => {
   res.status(200).json({
     message: 'Estado de la sesión',
     nickname: nickname,
-    sessionID: sessionID,
+    sessionID: sessionId, // Mostrar 'sessionId' correctamente
     email: email,
     ipSolicitud: ipSolicitud,
-    ipRespuesta: getLocalIP(), // Implementa esta función según tu entorno
+    ipRespuesta: getLocalIP(),
     inicio: createAD_CDMX,
     ultimoAcceso: lastAccess,
     antigüedad: `${hours} horas, ${minutes} minutos y ${seconds} segundos`
@@ -169,5 +187,6 @@ app.get('/listCurrentSession', (req, res) => {
 
 function getLocalIp() {
   // Implementa esta función para obtener la IP local según tu entorno
-  return '127.0.0.1';
+
+  return ' 192.168.1.64';
 }
