@@ -36,14 +36,14 @@ const getLocalIP = () => {
     const interfaces = networkInterfaces[interfaceName];
     for (const iface of interfaces) {
       if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;  // Retorna la IP local
+        return iface.address;  
       }
     }
   }
   return null;
 };
 
-const sessions = {}; // Almacena las sesiones iniciadas
+const sessions = {}; 
 
 app.post('/login', (request, response) => {
   const { email, nickname, macAddress } = request.body;
@@ -53,7 +53,7 @@ app.post('/login', (request, response) => {
   }
 
   const sessionId = uuidv4();
-  const now = new Date();
+  const now = moment().tz("America/Mexico_City").format();
 
   request.session.user = {
     sessionId,
@@ -65,10 +65,9 @@ app.post('/login', (request, response) => {
     lastAccessed: now
   };
 
-  // Guarda la sesión en el objeto sessions
   sessions[sessionId] = request.session.user;
 
-  console.log('Sesión iniciada:', sessions[sessionId]); // Verificar si la sesión se guarda correctamente
+  console.log('Sesión iniciada:', sessions[sessionId]); 
 
   return response.status(200).json({ message: "Sesión iniciada correctamente", sessionId });
 });
@@ -85,11 +84,9 @@ app.post("/logout", (request, response) => {
       return response.status(500).send('Error al cerrar la sesión');
     }
 
-    // Elimina la sesión del objeto sessions
     delete sessions[sessionId];
 
-    console.log('Sesión cerrada:', sessionId); // Verificar si la sesión se elimina correctamente
-
+    console.log('Sesión cerrada:', sessionId); 
     return response.status(200).json({ message: "Sesión cerrada correctamente." });
   });
 });
@@ -109,12 +106,12 @@ app.put('/update', (request, response) => {
   if (email) request.session.user.email = email;
   if (macAddress) request.session.user.macAddress = macAddress;
 
-  request.session.user.lastAccessed = new Date();
+  // Asigna la zona horaria local (por ejemplo, América/México_City)
+  request.session.user.lastAccessed = moment().tz("America/Mexico_City").format();
 
-  // Actualiza la sesión en el objeto sessions
   sessions[request.session.user.sessionId] = request.session.user;
 
-  console.log('Sesión actualizada:', sessions[request.session.user.sessionId]); // Verificar si la sesión se actualiza correctamente
+  console.log('Sesión actualizada:', sessions[request.session.user.sessionId]);
 
   return response.status(200).json({
     message: "Datos actualizados correctamente.",
@@ -125,7 +122,7 @@ app.put('/update', (request, response) => {
 app.get("/status", (request, response) => {
   const sessionId = request.query.sessionId;
 
-  console.log('Consultando estado de la sesión:', sessionId); // Verificar la consulta del estado de la sesión
+  console.log('Consultando estado de la sesión:', sessionId); 
 
   if (!sessionId || !sessions[sessionId]) {
     return response.status(404).json({ message: "No se encontró una sesión activa con el sessionId proporcionado." });
@@ -137,56 +134,48 @@ app.get("/status", (request, response) => {
   });
 });
 
-app.get('/listCurrentSession', (req, res) => {
-  const { sessionId } = req.query; // Asegúrate de usar 'sessionId'
+app.get('/listCurrentSessions', (req, res) => { 
   const now = new Date();
 
-  console.log('Listando sesión actual:', sessionId); // Verificar la consulta de la sesión actual
-
-  // Verifica si la sesión existe
-  if (!sessionId || !sessions[sessionId]) {
-    return res.status(404).json({ message: "No hay una sesión activa" });
+  if (Object.keys(sessions).length === 0) {
+    return res.status(404).json({ message: "No hay sesiones activas" });
   }
 
-  const sessionData = sessions[sessionId];
+  const sessionList = Object.entries(sessions).map(([sessionId, sessionData]) => {
+    const started = new Date(sessionData.createdAt);
+    const lastUpdate = new Date(sessionData.lastAccessed);
+    const nickname = sessionData.nickname || "Desconocido";
+    const email = sessionData.email || "No proporcionado";
+    const ipSolicitud = sessionData.ip || "No registrada";
 
-  // Recupera los datos de la sesión
-  const started = new Date(sessionData.createdAt);
-  const lastUpdate = new Date(sessionData.lastAccessed);
-  const nickname = sessionData.nickname || "Desconocido";
-  const email = sessionData.email || "No proporcionado";
-  const ipSolicitud = sessionData.ip || "No registrada";
+    if (isNaN(started.getTime()) || isNaN(lastUpdate.getTime())) {
+      return { sessionId, message: "Fechas no válidas" };
+    }
 
-  // Verifica que las fechas sean válidas
-  if (isNaN(started.getTime()) || isNaN(lastUpdate.getTime())) {
-    return res.status(400).json({ message: "Las fechas de la sesión no son válidas" });
-  }
+    // Calcular la antigüedad de la sesión
+    const sessionAgeMS = now - started;
+    const hours = Math.floor(sessionAgeMS / (1000 * 60 * 60));
+    const minutes = Math.floor((sessionAgeMS % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((sessionAgeMS % (1000 * 60)) / 1000);
 
-  // Calcular la antigüedad de la sesión
-  const sessionAgeMS = now - started;
-  const hours = Math.floor(sessionAgeMS / (1000 * 60 * 60));
-  const minutes = Math.floor((sessionAgeMS % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((sessionAgeMS % (1000 * 60)) / 1000);
+    return {
+      nickname,
+      sessionID: sessionId,
+      email,
+      ipSolicitud,
+      ipRespuesta: getLocalIP(),
+      inicio: moment(started).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+      ultimoAcceso: moment(lastUpdate).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+      antigüedad: `${hours} horas, ${minutes} minutos y ${seconds} segundos`
+    };
+  });
 
-  const createAD_CDMX = moment(started).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss');
-  const lastAccess = moment(lastUpdate).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss');
-
-  // Respuesta con el estado de la sesión
   res.status(200).json({
-    message: 'Estado de la sesión',
-    nickname: nickname,
-    sessionID: sessionId, // Mostrar 'sessionId' correctamente
-    email: email,
-    ipSolicitud: ipSolicitud,
-    ipRespuesta: getLocalIP(),
-    inicio: createAD_CDMX,
-    ultimoAcceso: lastAccess,
-    antigüedad: `${hours} horas, ${minutes} minutos y ${seconds} segundos`
+    message: 'Listado de sesiones activas',
+    sesiones: sessionList
   });
 });
 
 function getLocalIp() {
-  // Implementa esta función para obtener la IP local según tu entorno
-
-  return ' 192.168.1.64';
+  return '10.10.62.25';
 }
