@@ -9,8 +9,10 @@ const SessionsSchema = new Schema({
     nickname: String,
     email: String,
     macAddress: String,
+    status: String,
     ip: String,
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now },
+    lastAccessed: { type: Date, default: Date.now}
     
     
 },{
