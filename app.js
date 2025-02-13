@@ -2,7 +2,7 @@ import express from 'express';
 import session from 'express-session';
 import { v4 as uuidv4 } from 'uuid';
 import moment from 'moment-timezone';
-import os from "os";
+import os from 'os';
 import './databases.js';
 import Session from './models.sessions.js';
 import { encryptionService } from './encryption.js';
@@ -26,17 +26,58 @@ app.use(
   })
 );
 
-const getLocalIP = () => {
+// Función para obtener la IP del servidor
+const getServerIP = () => {
   const networkInterfaces = os.networkInterfaces();
   for (const interfaceName in networkInterfaces) {
     const interfaces = networkInterfaces[interfaceName];
     for (const iface of interfaces) {
-      if (iface.family === "IPv4" && !iface.internal) {
+      // Busca una IPv4 que no sea interna
+      if (iface.family === 'IPv4' && !iface.internal) {
         return iface.address;
       }
     }
   }
-  return null;
+  // Si no encuentra una IP externa, retorna la IP local
+  return '127.0.0.1';
+};
+
+// Función para obtener la IP del cliente
+const getClientIP = (req) => {
+  // Primero verifica el encabezado x-forwarded-for (para clientes detrás de proxy/balanceador de carga)
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    // Obtiene la primera IP en caso de que haya múltiples IPs reenviadas
+    const firstIP = forwardedFor.split(',')[0].trim();
+    // Si es una IP válida, la retorna
+    if (firstIP && firstIP !== '::1' && firstIP !== 'undefined') {
+      return firstIP;
+    }
+  }
+  
+  // Verifica la dirección remota de la conexión
+  const remoteAddress = req.connection.remoteAddress;
+  if (remoteAddress) {
+    // Maneja casos especiales de localhost
+    if (remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1') {
+      return '127.0.0.1';
+    }
+    // Elimina el prefijo IPv6 si está presente
+    return remoteAddress.replace(/^::ffff:/, '');
+  }
+  
+  // Verifica la dirección del socket
+  const socketAddress = req.socket.remoteAddress;
+  if (socketAddress) {
+    // Maneja casos especiales de localhost
+    if (socketAddress === '::1' || socketAddress === '::ffff:127.0.0.1') {
+      return '127.0.0.1';
+    }
+    return socketAddress.replace(/^::ffff:/, '');
+  }
+  
+  // Como última opción, retorna desconocido
+  return 'Desconocido';
 };
 
 // Cerrar sesiones inactivas cada 2 minutos
@@ -47,6 +88,13 @@ setInterval(async () => {
     { status: "Cerrado por el sistema" }
   );
 }, 60000);
+
+app.get('/', (request, response) => {
+  return response.status(200).json({
+    message: "Bienvenido al control de sesiones",
+    autor: "Jose Agustin"
+  });
+});
 
 // Crear sesión (CREATE)
 app.post('/login', async (req, res) => {
@@ -59,13 +107,15 @@ app.post('/login', async (req, res) => {
     const sessionId = uuidv4();
     const now = moment().tz("America/Mexico_City").format("YYYY-MM-DD hh:mm:ss A");
 
-    const ip = getLocalIP();
+    const clientIP = getClientIP(req);
+    const serverIP = getServerIP();
 
     const encryptedData = encryptionService.encryptSessionData({
       email,
       nickname,
       macAddress,
-      ip
+      clientIP,
+      serverIP
     });
 
     await Session.create({
@@ -76,7 +126,12 @@ app.post('/login', async (req, res) => {
       lastAccessed: now
     });
 
-    return res.status(200).json({ message: "Sesión iniciada correctamente", sessionId });
+    return res.status(200).json({ 
+      message: "Sesión iniciada correctamente", 
+      sessionId,
+      // clientIP,
+      // serverIP
+    });
   } catch (error) {
     return res.status(500).json({ message: "Error al guardar la sesión", error });
   }
@@ -156,8 +211,6 @@ app.get("/allSessions", async (req, res) => {
   }
 });
 
-// Añade este endpoint después de allSessions en tu server.js
-
 // Obtener todas las sesiones activas
 app.get("/allCurrentSessions", async (req, res) => {
   try {
@@ -235,7 +288,7 @@ app.post("/logout", async (req, res) => {
   try {
     const session = await Session.findOneAndUpdate(
       { sessionId },
-      { status: "Inactiva", lastAccessed: moment().tz("America/Mexico_City").format() },
+      { status: "Cerrada por el Usuario", lastAccessed: moment().tz("America/Mexico_City").format() },
       { new: true }
     );
     if (!session) {
@@ -256,4 +309,3 @@ app.delete("/deleteAllSessions", async (req, res) => {
     return res.status(500).json({ message: "Error al eliminar todas las sesiones", error });
   }
 });
-

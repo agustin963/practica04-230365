@@ -45,12 +45,13 @@ class EncryptionService {
         }
     }
 
-    encryptSessionData({ email, nickname, macAddress, ip }) {
+    encryptSessionData({ email, nickname, macAddress, clientIP, serverIP }) {
         return {
             email: this.encrypt(email),
             nickname: this.encrypt(nickname),
             macAddress: this.encrypt(macAddress),
-            ip: this.encrypt(ip)
+            clientIP: this.encrypt(clientIP),
+            serverIP: this.encrypt(serverIP)
         };
     }
 
@@ -61,7 +62,8 @@ class EncryptionService {
                 email: session.email ? this.decrypt(session.email) : 'No disponible',
                 nickname: session.nickname ? this.decrypt(session.nickname) : 'No disponible',
                 macAddress: session.macAddress ? this.decrypt(session.macAddress) : 'No disponible',
-                ip: session.ip ? this.decrypt(session.ip) : 'No disponible'
+                clientIP: session.clientIP ? this.decrypt(session.clientIP) : 'No disponible',
+                serverIP: session.serverIP ? this.decrypt(session.serverIP) : 'No disponible'
             };
         } catch (error) {
             console.error(`Error al desencriptar sesión:`, error);
