@@ -1,7 +1,7 @@
 import { model, Schema } from "mongoose";
 
 const SessionsSchema = new Schema({
-    sessionId: {
+  sessionId: {
         unique: true,
         required: true,
         type: String
@@ -25,7 +25,5 @@ const SessionsSchema = new Schema({
     versionKey: false,
     timestamps: true
 });
-
-
 
 export default model("Session", SessionsSchema);
